@@ -23,6 +23,7 @@ from django.utils import timezone
 DJANGO_PROJECT_PATH = dirname(dirname(dirname(os.path.abspath(__file__))))
 
 sys.path.insert(0, DJANGO_PROJECT_PATH)
+DJANGO_SETTINGS_MODULE = 'settings.dev'
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings.dev')
 django.setup()
@@ -146,7 +147,22 @@ def extract_challenge_data(challenge, phases):
     '''
 
     challenge_data_directory = CHALLENGE_DATA_DIR.format(challenge_id=challenge.id)
-    evaluation_script_url = challenge.evaluation_script
+
+    # TODO:
+    '''
+    - Add the DJANGO_SETTINGS_MODULE in command line argument
+    - Change the full path of `evaluation_script_url` according to the DJANGO_SETTINGS_MODULE
+    - 
+    ''' 
+    evaluation_script_url = challenge.evaluation_script.url
+
+    if DJANGO_SETTINGS_MODULE == "settings.dev":
+        evaluation_script_url = "{0}{1}".format("http://localhost:8000", evaluation_script_url)
+
+    elif DJANGO_SETTINGS_MODULE == "settings.test":
+        evaluation_script_url = "{0}{1}".format("http://testserver", evaluation_script_url)
+
+    print "##################    ", evaluation_script_url
     # create challenge directory as package
     create_dir_as_python_package(challenge_data_directory)
     # set entry in map
@@ -162,7 +178,16 @@ def extract_challenge_data(challenge, phases):
         phase_data_directory = PHASE_DATA_DIR.format(challenge_id=challenge.id, phase_id=phase.id)
         # create phase directory
         create_dir(phase_data_directory)
-        annotation_file_url = phase.test_annotation
+        annotation_file_url = phase.test_annotation.url
+
+        if DJANGO_SETTINGS_MODULE == "settings.dev":
+            annotation_file_url = "{0}{1}".format("http://localhost:8000", annotation_file_url)
+
+        elif DJANGO_SETTINGS_MODULE == "settings.test":
+            annotation_file_url = "{0}{1}".format("http://testserver", annotation_file_url)
+
+        print "##################    ", annotation_file_url
+
         annotation_file_name = os.path.basename(phase.test_annotation.name)
         PHASE_ANNOTATION_FILE_NAME_MAP[challenge.id][phase.id] = annotation_file_name
         annotation_file_path = PHASE_ANNOTATION_FILE_PATH.format(challenge_id=challenge.id, phase_id=phase.id,
@@ -178,7 +203,8 @@ def load_active_challenges():
     '''
          * Fetches active challenges and corresponding active phases for it.
     '''
-    q_params = {}
+    print "*** Loading Active Challenges ***"
+    q_params = {'published' : True}
     q_params['start_date__lt'] = timezone.now()
     q_params['end_date__gt'] = timezone.now()
 
@@ -188,8 +214,12 @@ def load_active_challenges():
     active_challenges = Challenge.objects.filter(**q_params)
 
     for challenge in active_challenges:
+        print "Loading Challenge: {}".format(challenge.title)
         phases = challenge.challengephase_set.all()
         extract_challenge_data(challenge, phases)
+        print "Successfully loaded {}".format(challenge.title)
+
+    print "*** Successfully loaded all the Challenges ***"
 
 
 def extract_submission_data(submission_id):
@@ -306,10 +336,20 @@ def add_challenge_callback(ch, method, properties, body):
 
 def main():
 
+    print '!!! STARTING WORKER !!!'
     # before starting, make sure that everything is cleaned
     # delete `challenge_data` and `submission_files` directory completely
-    shutil.rmtree(CHALLENGE_DATA_BASE_DIR)
-    shutil.rmtree(SUBMISSION_DATA_BASE_DIR)
+    try:
+        shutil.rmtree(CHALLENGE_DATA_BASE_DIR)
+        print 'Successfully removed CHALLENGE_DATA_BASE_DIR {}'.format(CHALLENGE_DATA_BASE_DIR)
+    except:
+        print 'Cannot remove CHALLENGE_DATA_BASE_DIR {} since it does not exist'.format(CHALLENGE_DATA_BASE_DIR)
+
+    try:
+        shutil.rmtree(SUBMISSION_DATA_BASE_DIR)
+        print 'Successfully removed SUBMISSION_DATA_BASE_DIR {}'.format(SUBMISSION_DATA_BASE_DIR)
+    except:
+        print 'Cannot remove SUBMISSION_DATA_BASE_DIR {} since it does not exist'.format(SUBMISSION_DATA_BASE_DIR)
 
     load_active_challenges()
 
